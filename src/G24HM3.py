@@ -1,5 +1,6 @@
 import random
 import sys
+from pprint import pprint
 
 from pyspark.mllib.linalg import Vectors
 
@@ -11,39 +12,51 @@ def G24HM3(file_name, k, iter):
 
 
 def kmeansPP(P, WP, k, iter):
+    class Point:
+        def __init__(self, vector, dist, prob):
+            self.vector = vector
+            self.dist = dist
+            self.prob = prob
+
+        def __repr__(self):
+            return str(self.vector)
+
     def Lloyd():
         pass
 
-    c0 = P.pop(random.randrange(0, len(P)))
-    S = [[c0, 0, 0]]
+    # first random point chosen from P with uniform prob.
+    c0 = Point(P.pop(random.randrange(0, len(P))), 0, 0)  # P[i] = point, dist_to_closest_center, p_to_be_extracted
+
+    S = [c0]
+
+    P_ = []
     for i in range(0, len(P)):
-        P[i] = [P[i], 0, 0]
+        point = Point(P[i], 0, 0)
+        P_.append(point)
 
-    for i in range(1, k):
-        for point in P:
-            point[1] = min([point[0].squared_distance(center[0]) for center in S])  # K^2 * |P| ??
-        pool = set(tuple(i) for i in P) - set(tuple(i) for i in S)
+    for _ in range(1, k):
+        for point in P_:
+            point.dist = min([point.vector.squared_distance(center.vector) for center in S])  # K^2 * |P| ??
+
+        pool = [point for point in P_ if point not in S]
+
+        # calcolo denominatore formula prof (per la pool, che ha solo i non-centri, ovvero P-S).
         total = 0
+        for i, point in enumerate(pool):
+            total += WP[i] * point.dist
 
-        j = 0
-        for pair in pool:
-            total += WP[i] * pair[1]
-            j += 1
+        # calcolo la probabilità per ogni punto di essere estratta.
+        for i, point in enumerate(pool):
+            point.prob = WP[i] * point.dist / total
 
-        j = 0
-        for pair in pool:
-            P[j][2] = WP[j] * pair[1] / total
-            j += 1
-
-        acc = j = 0
-        find = False
+        acc = 0
         x = random.random()
-        while not find and j < len(P):
-            acc += P[j][2]
+        for i, point in enumerate(pool):
+            acc += point.prob
             if acc >= x:
-                find = True
-            j += 1
-        S.append(P[j - 1])
+                S.append(point)
+                break
+    print(S)
     return S
 
 
