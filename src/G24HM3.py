@@ -9,9 +9,12 @@ def G24HM3(file_name, k, iter):
     P = readVectorsSeq(file_name)
     WP = [1.0] * len(P)
     start = time.time()
-    C, P = kmeansPP(P, WP, int(k), int(iter))
+    C = kmeansPP(P, WP, int(k), int(iter))
     print("Elapsed time: ", time.time() - start)
+    start = time.time()
     print(kmeansObj(P, C))
+    print("Elapsed time: ", time.time() - start)
+
 
 
 class Point:
@@ -85,17 +88,22 @@ def kmeansPP(P, WP, k, iter):
         # this is the new center
         S.add(extracted_point)
 
+    # Keep the distances updated with the last center selected
     for point in P:
         dst_between_point_and_last_center = point.dst(last_center_found)
         # updating minimum if we find a closer center
         if dst_between_point_and_last_center < point.dst_from_closest_center:
             point.dst_from_closest_center = dst_between_point_and_last_center
             point.closest_center = last_center_found
-    return S, P
+
+    return S
 
 
 def kmeansObj(P, C):
-    return sum([point.dst_from_closest_center for point in P]) / len(P)
+    accumulator = 0
+    for point in P:
+        accumulator += min([point.squared_distance(center.coordinates) for center in C])
+    return accumulator / len(P)
 
 
 def readVectorsSeq(filename):
