@@ -1,5 +1,6 @@
 import random
 import sys
+import time
 from pprint import pprint
 
 from pyspark.mllib.linalg import Vectors
@@ -8,15 +9,20 @@ from pyspark.mllib.linalg import Vectors
 def G24HM3(file_name, k, iter):
     P = readVectorsSeq(file_name)
     WP = [1.0] * len(P)
+    start = time.time()
     kmeansPP(P, WP, int(k), int(iter))
+    print(time.time() - start, "s")
 
 
 def kmeansPP(P, WP, k, iter):
     class Point:
-        def __init__(self, vector, dist, prob):
+        def __init__(self, vector: Vectors):
             self.vector = vector
-            self.dist = dist
-            self.prob = prob
+            self.dist = sys.maxsize
+            self.prob = 0
+
+        def dist(self, point):
+            return self.vector.squared_distance(point.vector)
 
         def __repr__(self):
             return str(self.vector)
@@ -25,20 +31,24 @@ def kmeansPP(P, WP, k, iter):
         pass
 
     # first random point chosen from P with uniform prob.
-    c0 = Point(P.pop(random.randrange(0, len(P))), 0, 0)  # P[i] = point, dist_to_closest_center, p_to_be_extracted
+    c0 = Point(P.pop(random.randrange(0, len(P))))  # P[i] = point, dist_to_closest_center, p_to_be_extracte
 
     S = [c0]
 
     P_ = []
     for i in range(0, len(P)):
-        point = Point(P[i], 0, 0)
+        point = Point(P[i])
         P_.append(point)
 
     for _ in range(1, k):
-        for point in P_:
-            point.dist = min([point.vector.squared_distance(center.vector) for center in S])  # K^2 * |P| ??
 
         pool = [point for point in P_ if point not in S]
+
+        for point in pool:
+            last_center = S[len(S)-1]
+            distance = point.vector.squared_distance(last_center.vector)
+            if distance < point.dist:
+                point.dist = distance
 
         # calcolo denominatore formula prof (per la pool, che ha solo i non-centri, ovvero P-S).
         total = 0
