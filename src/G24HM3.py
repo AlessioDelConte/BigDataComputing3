@@ -1,7 +1,6 @@
 import random
 import sys
 import time
-from pprint import pprint
 
 from pyspark.mllib.linalg import Vectors
 
@@ -10,68 +9,93 @@ def G24HM3(file_name, k, iter):
     P = readVectorsSeq(file_name)
     WP = [1.0] * len(P)
     start = time.time()
-    kmeansPP(P, WP, int(k), int(iter))
-    print(time.time() - start, "s")
+    C, P = kmeansPP(P, WP, int(k), int(iter))
+    print("Elapsed time: ", time.time() - start)
+    print(kmeansObj(P, C))
+
+
+class Point:
+    def __init__(self, coords, weight=1):
+        self.coordinates = coords
+        self.dst_from_closest_center = sys.maxsize
+        self.closest_center = None
+        self.extraction_probability = 0
+        self.weight = weight
+
+    def dst(self, other):
+        assert isinstance(other, Point)
+        return self.coordinates.squared_distance(other.coordinates)
+        # note we are using distances, not squared distances!
 
 
 def kmeansPP(P, WP, k, iter):
-    class Point:
-        def __init__(self, vector: Vectors):
-            self.vector = vector
-            self.dist = sys.maxsize
-            self.prob = 0
-
-        def dist(self, point):
-            return self.vector.squared_distance(point.vector)
-
-        def __repr__(self):
-            return str(self.vector)
-
     def Lloyd():
         pass
 
-    # first random point chosen from P with uniform prob.
-    c0 = Point(P.pop(random.randrange(0, len(P))))  # P[i] = point, dist_to_closest_center, p_to_be_extracte
+    # the first center is defined with uniform probability from P
+    random_index = random.randrange(0, len(P))
 
-    S = [c0]
+    c0 = P[random_index]
+    w0 = WP[random_index]
+    starting_center = Point(c0, w0)
+    S = {starting_center}
 
-    P_ = []
-    for i in range(0, len(P)):
-        point = Point(P[i])
-        P_.append(point)
+    pointsP = set()
+    for coord, weight in zip(P, WP):
+        pointsP.add(Point(coord, weight))
 
-    for _ in range(1, k):
+    P = pointsP  # using sets for more performance
 
-        pool = [point for point in P_ if point not in S]
+    last_center_found = starting_center
 
+    for i in range(1, k):
+        for point in P:
+            dst_between_point_and_last_center = point.dst(last_center_found)
+            # updating minimum if we find a closer center
+            if dst_between_point_and_last_center < point.dst_from_closest_center:
+                point.dst_from_closest_center = dst_between_point_and_last_center
+                point.closest_center = last_center_found
+
+        pool = P - S  # <1s
+
+        # calculate the denominator of the expression used to extract the probability
+        total = sum([point.weight * point.dst_from_closest_center for point in pool])
+
+        # assign the correct probability according to the formula
         for point in pool:
-            last_center = S[len(S)-1]
-            distance = point.vector.squared_distance(last_center.vector)
-            if distance < point.dist:
-                point.dist = distance
+            point.extraction_probability = point.weight * point.dst_from_closest_center / total
 
-        # calcolo denominatore formula prof (per la pool, che ha solo i non-centri, ovvero P-S).
-        total = 0
-        for i, point in enumerate(pool):
-            total += WP[i] * point.dist
+        assert round(sum([point.extraction_probability for point in pool]), 3) == 1.0
 
-        # calcolo la probabilità per ogni punto di essere estratta.
-        for i, point in enumerate(pool):
-            point.prob = WP[i] * point.dist / total
+        # random weighted extraction implementation
+        accumulator = 0
+        extracted_number = random.random()
 
-        acc = 0
-        x = random.random()
-        for i, point in enumerate(pool):
-            acc += point.prob
-            if acc >= x:
-                S.append(point)
+        extracted_point = None
+        for point in pool:
+            accumulator += point.extraction_probability
+            if accumulator >= extracted_number:
+                extracted_point = point
                 break
-    print(S)
-    return S
+
+        assert extracted_point is not None
+
+        last_center_found = extracted_point
+
+        # this is the new center
+        S.add(extracted_point)
+
+    for point in P:
+        dst_between_point_and_last_center = point.dst(last_center_found)
+        # updating minimum if we find a closer center
+        if dst_between_point_and_last_center < point.dst_from_closest_center:
+            point.dst_from_closest_center = dst_between_point_and_last_center
+            point.closest_center = last_center_found
+    return S, P
 
 
 def kmeansObj(P, C):
-    pass
+    return sum([point.dst_from_closest_center for point in P]) / len(P)
 
 
 def readVectorsSeq(filename):
@@ -83,3 +107,6 @@ def readVectorsSeq(filename):
 
 
 G24HM3(sys.argv[1], sys.argv[2], sys.argv[3])
+
+# tempo di esecuzione con K=1000: 37.8s
+# su Intel Core i5-6600K @ 3.5GHz.
