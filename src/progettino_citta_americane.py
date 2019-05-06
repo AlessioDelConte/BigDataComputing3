@@ -1,7 +1,9 @@
 import random
 import sys
 
+import matplotlib.backends.backend_pdf
 from pyspark.mllib.linalg import Vectors, DenseVector
+from matplotlib import pyplot as plt
 
 
 class Point:
@@ -19,10 +21,35 @@ class Point:
 
 
 def G24HM3(file_name, k, iter):
+    global pdf
+    pdf = matplotlib.backends.backend_pdf.PdfPages("../res/output.pdf")
     P = readVectorsSeq(file_name)
+    random.shuffle(P)
+    P = P[:30000]
     WP = [1.0] * len(P)
     P, C = kmeansPP(P, WP, k, iter)
+    print("KmeansPP end")
+    draw_map(partition(P, C), 1, 1)
     Lloyd(P, WP, partition(P, C), iter)
+    pdf.close()
+
+
+def draw_map(part: dict, i, phi):
+    plt.ion()
+    # plt.figure(i)
+    for center, cluster in part.items():
+        x = []
+        y = []
+        for point in cluster:
+            x.append(point.coordinates[1])
+            y.append(point.coordinates[0])
+        plt.scatter(x, y, s=0.1)
+        plt.scatter(center.coordinates[1], center.coordinates[0], s=2, c='r')
+        plt.xlabel("PHI: " + str(phi))
+    plt.pause(0.0001)
+    plt.clf()
+    # pdf.savefig(i)
+    # plt.close(i)
 
 
 def partition(P: set, S: set):
@@ -44,6 +71,7 @@ def centroid(partitions: dict):
     partitions_with_new_centers = dict()
     for center, cluster in partitions.items():
         new_centroid = Point(DenseVector([0.0, 0.0]), 1)
+        # cluster.add(center)
         for point in cluster:
             new_centroid.coordinates += point.coordinates
         new_centroid.coordinates *= 1 / len(cluster)
@@ -57,13 +85,15 @@ def Lloyd(P, WP, partitions, iter):
     prev_phi = sys.maxsize
     while i <= iter and not stop:
         partitions_with_new_centroids = centroid(partition(P, {center for center in partitions.keys()}))
-        phi = kmeansObj(P, partitions_with_new_centroids.keys())
-        if phi < prev_phi:
-            prev_phi = phi
-            partitions = partitions_with_new_centroids
-        else:
-            stop = True
+        # phi = kmeansObj(P, partitions_with_new_centroids.keys())
+        # if phi < prev_phi:
+        #     prev_phi = phi
+        #     partitions = partitions_with_new_centroids
+        # else:
+        #     stop = True
+        partitions = partitions_with_new_centroids
         i += 1
+        draw_map(partitions, i, kmeansObj(P, partitions_with_new_centroids.keys()))
     return partitions
 
 
@@ -105,21 +135,20 @@ def kmeansPP(P, WP, k, iter):
 
         # random weighted extraction implementation
         accumulator = 0
+        extracted_point = None
         extracted_number = random.random()
 
-        extracted_point = None
-        for point in pool:
+        while accumulator < extracted_number:
+            point = pool.pop()
             accumulator += point.extraction_probability
-            if accumulator >= extracted_number:
-                extracted_point = point
-                break
+            extracted_point = point
 
         assert extracted_point is not None
 
         last_center_found = extracted_point
 
         # this is the new center
-        S.add(extracted_point)
+        S.add(last_center_found)
 
     # Keep the distances updated with the last center selected
     for point in P:
